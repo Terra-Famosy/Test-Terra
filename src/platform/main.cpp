@@ -14,7 +14,7 @@ int main(void)
 
 
 	SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-	InitWindow(800, 450, "window name");
+	InitWindow(800, 450, "Dimensia");
 	SetExitKey(KEY_NULL);
 	SetTargetFPS(240);
 
