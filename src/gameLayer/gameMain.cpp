@@ -4,6 +4,7 @@
 #include <asserts.h>
 #include <assetManager.h>
 #include <gameMap.h>
+#include <helpers.h>
 
 struct GameData
 {
@@ -18,13 +19,24 @@ bool initGame()
 {
 	assetManager.loadAll();
 
-	gameData.gameMap.create(30, 10);
+	gameData.gameMap.create(30, 30);
 
-	gameData.gameMap.getBlockUnsafe(0, 0).type = Block::dirt;
-	gameData.gameMap.getBlockUnsafe(1, 1).type = Block::dirt;
-	gameData.gameMap.getBlockUnsafe(2, 2).type = Block::dirt;
-	gameData.gameMap.getBlockUnsafe(3, 3).type = Block::dirt;
-	gameData.gameMap.getBlockUnsafe(4, 4).type = Block::dirt;
+	for (int y = 0; y < gameData.gameMap.h; y++)
+		for (int x = 0; x < gameData.gameMap.w; x++)
+		{
+
+			float s = (std::sin(x) + 1.f) / 2.f;
+			float s2 = (std::sin(x * 0.5) + 1.f) / 2.f;
+
+			if (gameData.gameMap.h - (gameData.gameMap.h * 0.3 * s) - gameData.gameMap.h * 0.5 - (gameData.gameMap.h * 0.2 * s2) < y)
+			{
+				gameData.gameMap.getBlockUnsafe(x, y).type = Block::dirt;
+			}
+			else
+			{
+				gameData.gameMap.getBlockUnsafe(x, y).type = Block::air;
+			}
+		}
 
 	gameData.camrea.target = { 0, 0 }; // world-space center of view
 	gameData.camrea.rotation = 0.0f;
@@ -49,6 +61,30 @@ bool updateGame()
 	if (IsKeyDown(KEY_S)) gameData.camrea.target.y += 7.f * deltaTime;
 #pragma endregion
 
+	Vector2 worldPos = GetScreenToWorld2D(GetMousePosition(), gameData.camrea);
+	int blockX = (int)floor(worldPos.x);
+	int blockY = (int)floor(worldPos.y);
+
+	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+	{
+		auto b = gameData.gameMap.getBlockSafe(blockX, blockY);
+		if (b)
+		{
+			*b = {};
+		}
+	}
+
+	if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT))
+	{
+		auto b = gameData.gameMap.getBlockSafe(blockX, blockY);
+		if (b)
+		{
+			b->type = Block::gold;
+		}
+	}
+
+#pragma region drawWorld
+
 	BeginMode2D(gameData.camrea);
 
 	for (int y = 0; y < gameData.gameMap.h; y++)
@@ -58,21 +94,30 @@ bool updateGame()
 
 			if (b.type != Block::air)
 			{
-				float size = 1;
-				float posX = x * size;
-				float posY = y * size;
-
 
 				DrawTexturePro(
-					assetManager.dirt, 
-					Rectangle{0.f ,0.f, (float)assetManager.dirt.width, (float)assetManager.dirt.height }, // source
-					{posX, posY, size, size}, // dest
+					assetManager.textures, 
+					getTextureAtlas(b.type, 0, 32, 32), // source
+					{(float)x, (float)y, 1, 1}, // dest
 					{0, 0}, // origin (top-left corner)
 					0.0f, // rotation
 					WHITE // tint
 				);
+
 			}
+
 		}
+
+#pragma endregion
+
+	DrawTexturePro(
+		assetManager.frame,
+		{ 0.f ,0.f, (float)assetManager.frame.width, (float)assetManager.frame.height }, // source
+		{ (float)blockX, (float)blockY, 1, 1 }, // dest
+		{ 0, 0 }, // origin (top-left corner)
+		0.0f, // rotation
+		WHITE // tint
+	);
 
 	EndMode2D();
 
