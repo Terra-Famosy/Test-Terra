@@ -6,11 +6,16 @@
 #include <gameMap.h>
 #include <helpers.h>
 #include <raymath.h>
+#include <randomStuff.h>
+#include <worldGenerator.h>
+#include <imgui.h>
 
 struct GameData
 {
 	GameMap gameMap;
+	GameMap backgroundGameMap;
 	Camera2D camrea;
+	int seed = 1234;
 
 }gameData;
 
@@ -20,24 +25,9 @@ bool initGame()
 {
 	assetManager.loadAll();
 
-	gameData.gameMap.create(700, 200);
+	generateWorld(gameData.gameMap, gameData.seed);
 
-	for (int y = 0; y < gameData.gameMap.h; y++)
-		for (int x = 0; x < gameData.gameMap.w; x++)
-		{
-
-			float s = (std::sin(x) + 1.f) / 2.f;
-			float s2 = (std::sin(x * 0.5) + 1.f) / 2.f;
-
-			if (gameData.gameMap.h - (gameData.gameMap.h * 0.3 * s) - gameData.gameMap.h * 0.5 - (gameData.gameMap.h * 0.2 * s2) < y)
-			{
-				gameData.gameMap.getBlockUnsafe(x, y).type = Block::dirt;
-			}
-			else
-			{
-				gameData.gameMap.getBlockUnsafe(x, y).type = Block::air;
-			}
-		}
+	gameData.backgroundGameMap = gameData.gameMap;
 
 	gameData.camrea.target = { 0, 0 }; // world-space center of view
 	gameData.camrea.rotation = 0.0f;
@@ -56,15 +46,22 @@ bool updateGame()
 	ClearBackground({ 75, 75, 150, 255 });
 
 #pragma region camera movement
-	if (IsKeyDown(KEY_A)) gameData.camrea.target.x -= 7.f * deltaTime;
-	if (IsKeyDown(KEY_D)) gameData.camrea.target.x += 7.f * deltaTime;
-	if (IsKeyDown(KEY_W)) gameData.camrea.target.y -= 7.f * deltaTime;
-	if (IsKeyDown(KEY_S)) gameData.camrea.target.y += 7.f * deltaTime;
+	static float CAMERA_SPEED = 10.f;
+	if (IsKeyDown(KEY_A)) gameData.camrea.target.x -= CAMERA_SPEED * deltaTime;
+	if (IsKeyDown(KEY_D)) gameData.camrea.target.x += CAMERA_SPEED * deltaTime;
+	if (IsKeyDown(KEY_W)) gameData.camrea.target.y -= CAMERA_SPEED * deltaTime;
+	if (IsKeyDown(KEY_S)) gameData.camrea.target.y += CAMERA_SPEED * deltaTime;
 #pragma endregion
+
+
 
 	Vector2 worldPos = GetScreenToWorld2D(GetMousePosition(), gameData.camrea);
 	int blockX = (int)floor(worldPos.x);
 	int blockY = (int)floor(worldPos.y);
+
+	static Block block{};
+
+	block.type -= (int)GetMouseWheelMove();
 
 	if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
 	{
@@ -80,7 +77,7 @@ bool updateGame()
 		auto b = gameData.gameMap.getBlockSafe(blockX, blockY);
 		if (b)
 		{
-			b->type = Block::gold;
+			b->type = block.type;
 		}
 	}
 
@@ -109,19 +106,82 @@ bool updateGame()
 
 			if (b.type != Block::air)
 			{
+				if (b.type == Block::woodLog)
+				{
+					auto* bUP = gameData.gameMap.getBlockSafe(x, y - 1);
+					auto* bDOWN = gameData.gameMap.getBlockSafe(x, y + 1);
+					auto* bLEFT = gameData.gameMap.getBlockSafe(x - 1, y);
+					auto* bRIGHT = gameData.gameMap.getBlockSafe(x + 1, y);
 
-				DrawTexturePro(
-					assetManager.textures, 
-					getTextureAtlas(b.type, 0, 32, 32), // source
-					{(float)x, (float)y, 1, 1}, // dest
-					{0, 0}, // origin (top-left corner)
-					0.0f, // rotation
-					WHITE // tint
-				);
+					int blockState = 0;
+
+					// Prüfen auf nullptr und dann mit -> auf Feld zugreifen
+					auto isType = [](const Block* b, auto t) { return b && b->type == t; };
+
+					bool upIsLog = isType(bUP, Block::woodLog);
+					bool downIsLog = isType(bDOWN, Block::woodLog);
+					bool downIsSolid = bDOWN && bDOWN->type != Block::air && bDOWN->type != Block::woodLog;
+					bool leftIsLeaves = isType(bLEFT, Block::leaves);
+					bool rightIsLeaves = isType(bRIGHT, Block::leaves);
+					bool upIsLeaves = isType(bUP, Block::leaves);
+
+					if (downIsLog && !upIsLog) // log with down log
+					{
+						if (upIsLeaves || rightIsLeaves || leftIsLeaves)
+							blockState = 5;
+						else
+							blockState = 6;
+					}
+					else if (downIsSolid) // supported by non-air/non-log block below
+					{
+						if (upIsLog)
+							blockState = 4;
+						else
+							blockState = 7;
+					}
+					else
+					{
+						if (!leftIsLeaves && !rightIsLeaves) blockState = 0; // log
+						else if (leftIsLeaves && rightIsLeaves) blockState = 1; // log with leaves on both sides
+						else if (rightIsLeaves) blockState = 2; // log with leaves on left
+						else if (leftIsLeaves) blockState = 3; // log with leaves on right
+					}
+
+					DrawTexturePro(
+						assetManager.woodLog,
+						getTextureAtlas(blockState, 0, 32, 32), // source
+						{ (float)x, (float)y, 1, 1 }, // dest
+						{ 0, 0 }, // origin (top-left corner)
+						0.0f, // rotation
+						WHITE // tint
+					);
+				}
+				else
+				{
+					DrawTexturePro(
+						assetManager.textures, 
+						getTextureAtlas(b.type, 0, 32, 32), // source
+						{(float)x, (float)y, 1, 1}, // dest
+						{0, 0}, // origin (top-left corner)
+						0.0f, // rotation
+						WHITE // tint
+					);
+				}
+
 
 			}
 
 		}
+
+	// Draw selected Block
+	DrawTexturePro(
+		assetManager.textures,
+		getTextureAtlas(block.type, 0, 32, 32), // source
+		{ (float)bottomRightView.x - 1, (float)topLeftView.y, 1, 1 }, // dest
+		{ 0, 0 }, // origin (top-left corner)
+		0.0f, // rotation
+		WHITE // tint
+	);
 
 	// Draw select block
 	DrawTexturePro(
@@ -133,9 +193,17 @@ bool updateGame()
 		WHITE // tint
 	);
 
-#pragma endregion
-
 	EndMode2D();
+
+	ImGui::Begin("Game controll");
+
+	ImGui::SliderInt("Seed", &gameData.seed, 0, 10000);
+	ImGui::SliderFloat("Camera zoom", &gameData.camrea.zoom, 10.f, 150.f);
+	ImGui::SliderFloat("Camera speed", &CAMERA_SPEED, 5.f, 30.f);
+
+	ImGui::End();
+
+#pragma endregion
 
 	DrawFPS(10, 10);
 
