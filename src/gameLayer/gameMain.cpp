@@ -15,7 +15,7 @@ struct GameData
 	GameMap gameMap;
 	GameMap backgroundGameMap;
 	Camera2D camrea;
-	int seed = 1234;
+	int seed = 12345;
 
 }gameData;
 
@@ -29,7 +29,7 @@ bool initGame()
 
 	gameData.backgroundGameMap = gameData.gameMap;
 
-	gameData.camrea.target = { 0, 0 }; // world-space center of view
+	gameData.camrea.target = { 20, 120 }; // world-space center of view
 	gameData.camrea.rotation = 0.0f;
 	gameData.camrea.zoom = 100.0f;
 
@@ -197,9 +197,13 @@ bool updateGame()
 
 	ImGui::Begin("Game controll");
 
-	ImGui::SliderInt("Seed", &gameData.seed, 0, 10000);
 	ImGui::SliderFloat("Camera zoom", &gameData.camrea.zoom, 10.f, 150.f);
 	ImGui::SliderFloat("Camera speed", &CAMERA_SPEED, 5.f, 30.f);
+	ImGui::SliderInt("Seed", &gameData.seed, 0, 10000);
+	if (ImGui::Button("Regenerate world"))
+	{
+		generateWorld(gameData.gameMap, gameData.seed);
+	}
 
 	ImGui::End();
 
